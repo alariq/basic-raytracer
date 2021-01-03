@@ -1,0 +1,14 @@
+.vscode/
+.clangd/
+.cache/
+.ccls-cache/
+dump/
+*.swp
+*.dll
+build/
+build-rel/
+cmake-x64/
+cachegrind.*
+callgrind.*
+tools/
+
