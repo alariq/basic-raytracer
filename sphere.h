@@ -8,7 +8,9 @@
 class sphere {
   public:
     sphere() {}
-    sphere(point3 cen, Real r) : center(cen), radius(r){};
+    sphere(point3 cen, Real r, const material& m) : center(cen), radius(r), mat(m){};
+
+    material get_material() const { return mat; }
 
     bool hit(const ray &r, Real t_min, Real t_max, hit_info &rec) const {
         vec3 oc = r.origin() - center;
@@ -39,4 +41,5 @@ class sphere {
   public:
     point3 center;
     Real radius;
+    material mat;
 };

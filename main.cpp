@@ -2,6 +2,8 @@
 #include "camera.h"
 #include "vec.h"
 #include "sphere.h"
+#include "light.h"
+#include "material.h"
 #include "ray.h"
 #include "hit.h"
 
@@ -16,13 +18,20 @@ const Real r05 = Real(0.5);
 
 class scene {
     std::vector<sphere> spheres;
+    std::vector<light> lights;
+    color ambient_colour;
+    color background_colour;
 
     public:
-    bool intersect(const ray &r, Real t_min, Real t_max, hit_info& hit) {
+
+    scene():background_colour(-1,-1,-1) {}
+
+    bool intersect(const ray &r, Real t_min, Real t_max, hit_info& hit) const {
         bool b_hit = false;
         for(const auto& s: spheres) {
             if(s.hit(r, t_min, t_max, hit)) {
                 t_max = hit.t;
+                hit.mat = s.get_material();
                 b_hit = true;
             }
         }
@@ -30,33 +39,68 @@ class scene {
         return b_hit;
     }
 
-    void add_sphere(const point3& pos, Real radius) {
-        spheres.emplace_back(pos, radius);
+    void add_sphere(const point3& pos, Real radius, const material& mat) {
+        spheres.emplace_back(pos, radius, mat);
     }
+
+    void add_light(const light& l) {
+        lights.push_back(l);
+    }
+
+    void set_background(color bg) { background_colour = bg; }
+    color get_background() const { return background_colour; }
+    bool has_background() const { return background_colour.x>=0; }
+
+    void set_ambient(color amb) { ambient_colour = amb; }
+    color get_ambient() const { return ambient_colour; }
 };
 
-Real hit_sphere(const point3& center, Real radius, const ray& r) {
-    vec3 oc = r.origin() - center;
-    auto a = dot(r.direction(), r.direction());
-    auto b = 2.0 * dot(oc, r.direction());
-    auto c = dot(oc, oc) - radius*radius;
-    auto discriminant = b*b - 4*a*c;
-    if (discriminant < 0) {
-        return -1.0;
-    } else {
-        return (-b - sqrt(discriminant) ) / (2.0*a);
+#if 0
+color ray_color(const ray& r, const scene& world, int depth_level) {
+
+    hit_info rec;
+
+    // If we've exceeded the ray bounce limit, no more light is gathered.
+    if (depth_level <= 0)
+        return color(0,0,0);
+
+    Real t_min = 1e-3f;
+    Real t_max = 1e+5f;
+    if (world.intersect(r, t_min, t_max, rec)) {
+        ray scattered;
+        color attenuation;
+        if (rec.mat.scatter(r, rec, attenuation, scattered))
+            return attenuation * ray_color(scattered, world, depth_level-1);
+        return color(0,0,0);
     }
+
+    vec3 unit_direction = r.direction();
+    auto t = 0.5*(unit_direction.y + 1.0);
+    return (1.0-t)*color(1.0, 1.0, 1.0) + t*color(0.5, 0.7, 1.0);
 }
+#endif
 
-color intersect_scene(const ray& r) {
-    auto t = hit_sphere(point3(0,0,-1), 0.5, r);
-    if(t > r0) {
-        vec3 n = normalize(r.at(t) - vec3(0,0,-1));
-        return r05*color(n.x+r1, n.y+r1, n.z+r1);
+color ray_color(const ray& r, const scene& world, int depth_level) {
+
+    hit_info rec;
+
+    // If we've exceeded the ray bounce limit, no more light is gathered.
+    if (depth_level <= 0)
+        return color(0,0,0);
+
+    Real t_min = 1e-3f;
+    Real t_max = 1e+5f;
+    if (world.intersect(r, t_min, t_max, rec)) {
+        return rec.mat.albedo*rec.mat.ka*world.get_ambient();
     }
 
-    t = r05 * (r.direction().y + r1);
-    return (r1 - t)*color(r1,r1,r1) + t*color(r05, Real(0.7), r1);
+    if (world.has_background()) {
+        return world.get_background();
+    } else {
+        vec3 unit_direction = r.direction();
+        auto t = 0.5 * (unit_direction.y + 1.0);
+        return (1.0 - t) * color(1.0, 1.0, 1.0) + t * color(0.5, 0.7, 1.0);
+    }
 }
 
 void write_color(FILE* fh, color pixel) {
@@ -73,31 +117,38 @@ void write_color(FILE* fh, color pixel) {
 
 int main(void) {
 
-    const int image_width = 256;
-    const int image_height = 256;
+    const int image_width = 512;
+    const int image_height = 512;
     Real aspect_ratio = Real(image_width) / Real(image_height);
+    const Real hor_fov = 45.0f; // half, so multiplied by 2
+    //----------------------------------------------------------
 
-    Real viewport_height = Real(2.0);
-    Real viewport_width = aspect_ratio * viewport_height;
-    Real focal_length = 1.0f;
-
-    vec3 lookfrom = vec3(0,0,0);
-    vec3 lookat = vec3(0,0,1);
+    vec3 lookfrom = vec3(0,0,1);
+    vec3 lookat = vec3(0,0,-2.5);
     vec3 vup = vec3(0,1,0);
-    Real vfov = 45.0f;
-    Real aperture = 1.0f;
+    Real vfov = (2.0*hor_fov) / aspect_ratio;
+    Real aperture = 0.0f;
     Real focus_dist = 1.0f;
-
-    vec3 origin = lookfrom;
-    vec3 horizontal = vec3(viewport_width, 0, 0);
-    vec3 vertical = vec3(0, viewport_height, 0);
-    vec3 lower_left_corner = origin - Real(0.5) * horizontal -
-                             Real(0.5) * vertical - vec3(0, 0, focal_length);
 
     camera cam(lookfrom, lookat, vup, vfov, aspect_ratio, aperture, focus_dist);
 
     scene my_scene;
-    my_scene.add_sphere(point3(0,0,-1), r05);
+    const int scene_idx = 1;
+    if (scene_idx == 0) {
+        my_scene.add_sphere(point3(0, 0, -1), r05,
+                            material(color(0.7, 0.3, 0.3)));
+        my_scene.add_sphere(point3(0, -100.5, -1), Real(100),
+                            material(color(0.8, 0.8, 0)));
+    } else if (scene_idx == 1) {
+        my_scene.add_sphere(point3(-2.1, 2.0, -3.0), r1,
+                            material(color(0.17, 0.18, 0.5), 0.3, 0.9, 1.0, 200));
+        my_scene.add_sphere(point3(0, 0, -3.0), r1,
+                            material(color(0.5, 0.17, 0.18), 0.3, 0.9, 1.0, 200));
+        my_scene.add_sphere(point3(2.1, -2.0, -3.0), r1,
+                            material(color(0.18, 0.5, 0.17), 0.3, 0.9, 1.0, 200));
+        my_scene.set_background(color(0,0,0));
+        my_scene.set_ambient(color(1,1,1));
+    }
 
     FILE* f = fopen("result.ppm", "w");
     if(!f) {
@@ -113,23 +164,9 @@ int main(void) {
             Real u = Real(i) * oo_w;
             Real v = Real(j) * oo_h;
             
-            vec3 dir = normalize(lower_left_corner + u*horizontal + v*vertical - origin);
-            ray r(origin, dir);
-            hit_info hi;
-            Real t_min = 1e-5f;
-            Real t_max = 1e+5f;
-            hi.t = t_max;
+            ray r = cam.get_ray(u, v);
             color pixel;
-            if(my_scene.intersect(r, t_min, t_max, hi)) {
-                vec3 n = hi.normal;// normalize(r.at(hi.t) - vec3(0,0,-1));
-                pixel = r05 * (n + r1);
-            } else {
-                Real t = r05 * (r.direction().y + r1);
-                pixel = (r1 - t)*color(r1,r1,r1) + t*color(r05, Real(0.7), r1);
-            }
-             
-            //color pixel = intersect_scene(r);
-            //pixel = vec3(u, v, 0.25);
+            pixel = ray_color(r, my_scene, 8);
             write_color(f, pixel);
         }
     }

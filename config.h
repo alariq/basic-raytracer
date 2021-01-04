@@ -2,3 +2,4 @@
 
 using Real = float;
 
+#define INLINE inline
