@@ -11,4 +11,4 @@ cmake-x64/
 cachegrind.*
 callgrind.*
 tools/
-
+doc/

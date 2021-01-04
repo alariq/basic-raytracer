@@ -1,22 +1,8 @@
 #pragma once
 
+#include "config.h"
 #include "vec.h"
-
-class ray {
-  public:
-    ray() {}
-    ray(const point3 &origin, const vec3 &direction)
-        : orig(origin), dir(direction) {}
-
-    point3 origin() const { return orig; }
-    vec3 direction() const { return dir; }
-
-    point3 at(Real t) const { return orig + t * dir; }
-
-  public:
-    point3 orig;
-    vec3 dir;
-};
+#include "ray.h"
 
 class camera {
   public:
@@ -24,8 +10,8 @@ class camera {
            Real vfov, // vertical field-of-view in degrees
            Real aspect_ratio, Real aperture, Real focus_dist) {
         auto theta = degrees_to_radians(vfov);
-        auto h = tan(theta / 2);
-        auto viewport_height = 2.0 * h;
+        auto h = std::tan(theta / Real(2.0));
+        auto viewport_height = Real(2.0) * h;
         auto viewport_width = aspect_ratio * viewport_height;
 
         w = normalize(lookfrom - lookat);

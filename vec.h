@@ -1,8 +1,7 @@
 #pragma once
 
+#include "config.h"
 #include <math.h>
-
-using Real = float;
 
 struct vec3 {
     Real x, y, z;
@@ -16,6 +15,34 @@ using color = vec3;
 template <typename T>
 T degrees_to_radians(T degrees) {
     return degrees * Real(M_PI) / Real(180.0);
+}
+
+#ifdef min
+#undef min
+#endif
+
+
+#ifdef max
+#undef max
+#endif
+
+/** Returns the lesser of two vectors */
+template <typename DATA_TYPE>
+inline DATA_TYPE min(const DATA_TYPE x, const DATA_TYPE y){
+	return (x < y)? x : y;
+}
+
+/** Returns the greater of two vectors */
+template <typename DATA_TYPE>
+inline DATA_TYPE max(const DATA_TYPE x, const DATA_TYPE y){
+	return (x > y)? x : y;
+}
+
+
+/** Clamps x to [lower-upper] */
+template <typename DATA_TYPE>
+inline DATA_TYPE clamp(const DATA_TYPE x, const DATA_TYPE lower, const DATA_TYPE upper){
+	return max(min(x, DATA_TYPE(upper)), DATA_TYPE(lower));
 }
 
 
@@ -65,6 +92,10 @@ bool operator == (const vec3 &u, const vec3 &v){
 
 bool operator != (const vec3 &u, const vec3 &v){
 	return (u.x != v.x || u.y != v.y || u.z != v.z);
+}
+
+float dot(const vec3 &u, const vec3 &v){
+	return u.x * v.x + u.y * v.y + u.z * v.z;
 }
 
 vec3 cross(const vec3 &u, const vec3 &v){
