@@ -12,3 +12,4 @@ cachegrind.*
 callgrind.*
 tools/
 doc/
+*.ppm

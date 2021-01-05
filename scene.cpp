@@ -9,33 +9,6 @@
 #include <cstdlib>
 #include <cstdio>
 
-
-
-const char* load_file(const char* fname, size_t* out_size = nullptr)
-{
-    assert(fname);
-    FILE* f = fopen(fname, "r");
-    if(!f)
-    {
-        printf("Can't open %s \n", fname);
-        return nullptr;
-    }
-
-    fseek(f, 0, SEEK_SET);
-    fseek(f, 0, SEEK_END);
-    size_t size = ftell(f);
-
-    char* pdata = new char[size + 1];
-    size_t  read_size = fread(pdata, size, 1, f);
-    assert(read_size == size);
-    pdata[size] = '\0';
-    if(out_size)
-        *out_size = size;
-
-    fclose(f);
-    return pdata;
-}
-
 bool scene::load(const char* filename) {
     
     using namespace tinyxml2;

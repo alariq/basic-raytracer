@@ -111,6 +111,9 @@ int main(int argc, char** argv) {
     std::string output_filename = "result.ppm";
     if(argc > 1) {
         scene_filename = argv[1];
+    } else {
+        printf("No filename given, usage:\n\t %s <scene xml file>\n", argv[0]);
+        return -1;
     }
 
     int image_width = 512;
@@ -135,7 +138,10 @@ int main(int argc, char** argv) {
         my_scene.add_sphere(point3(0, -100.5, -1), Real(100),
                             material(color(0.8, 0.8, 0)));
     } else {
-        my_scene.load(scene_filename.c_str());
+        if(!my_scene.load(scene_filename.c_str())) {
+            return -1;
+        }
+
         const scene::camera_params& cp = my_scene.get_camera_params();
         output_filename = my_scene.get_output_filename();
         // change extension to ppm
