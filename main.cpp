@@ -46,6 +46,14 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
 }
 #endif
 
+bool ray_shadow(const ray& r, const scene& world) {
+
+    hit_info rec;
+    Real t_min = 1e-3f;
+    Real t_max = 1e+5f;
+    return world.intersect(r, t_min, t_max, rec);
+}
+
 color ray_color(const ray& r, const scene& world, int depth_level) {
 
     hit_info rec;
@@ -65,6 +73,12 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
                 case light::Directional:
                     {
                         const vec3& light_dir = l.get_direction();
+
+                        ray sh_r(rec.p, -light_dir);
+                        bool b_in_shadow = ray_shadow(sh_r, world);
+                        if(b_in_shadow)
+                            break;
+
                         const color& light_color = l.get_color();
                         Real ndotl = max(dot(rec.normal, -light_dir), r0);
                         diffuse = diffuse + ndotl * light_color;
