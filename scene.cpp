@@ -3,11 +3,18 @@
 #include "config.h"
 #include "tinyxml2/tinyxml2.h"
 #include "vec.h"
+#include "obj_loader.h"
 #include "material.h"
 
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
+
+scene::~scene() {
+    for(auto& mesh: meshes) {
+        delete mesh;
+    }
+}
 
 bool scene::load(const char* filename) {
     
@@ -20,6 +27,8 @@ bool scene::load(const char* filename) {
         printf("Failed to parse XML file: %s\n", filename);
         return false;
     }
+
+    scene_filename = filename;
 
 	XMLElement* scene_el = doc.FirstChildElement("scene");
     const char* output_file = nullptr;
@@ -44,7 +53,10 @@ bool scene::load(const char* filename) {
 
     spheres.clear();
     XMLElement* surfaces_el = scene_el->FirstChildElement("surfaces");
-    b_success &= read_surfaces(surfaces_el, &spheres);
+    b_success &= read_spheres(surfaces_el, &spheres);
+
+    meshes.clear();
+    b_success &= read_meshes(surfaces_el, &meshes);
 
     return b_success;
 }
@@ -102,18 +114,31 @@ bool scene::read_lights(const class tinyxml2::XMLElement *el, color* ambient, st
             const XMLElement* par_dir_el = parallel_light_el->FirstChildElement("direction");
             color c = read_colour(par_col_el, &b_succes);
             vec3 dir = read_vec3(par_dir_el, &b_succes);
-            lights->emplace_back(dir,c);
+            lights->emplace_back(dir,c, light::Directional);
 
         } while((parallel_light_el = parallel_light_el->NextSiblingElement("parallel_light")));
+    }
+
+    const XMLElement* point_light_el = el->FirstChildElement("point_light");
+    if (point_light_el)
+    {
+        do {
+            const XMLElement* pt_col_el = point_light_el->FirstChildElement("color");
+            const XMLElement* pt_pos_el = point_light_el->FirstChildElement("position");
+            color c = read_colour(pt_col_el, &b_succes);
+            vec3 pos = read_vec3(pt_pos_el, &b_succes);
+            lights->emplace_back(pos, c, light::Point);
+
+        } while((point_light_el = point_light_el->NextSiblingElement("point_light")));
     }
 
     return b_succes;
 }
 
-bool scene::read_surfaces(const class tinyxml2::XMLElement *el, std::vector<sphere>* spheres) {
+bool scene::read_spheres(const class tinyxml2::XMLElement *el, std::vector<sphere>* spheres) {
 
     using namespace tinyxml2;
-    bool b_success = false;
+    bool b_success = true;
 
     const XMLElement* sphere_el = el->FirstChildElement("sphere");
     if (sphere_el)
@@ -140,6 +165,53 @@ bool scene::read_surfaces(const class tinyxml2::XMLElement *el, std::vector<sphe
 
     return b_success;
 
+}
+
+bool scene::read_meshes(const class tinyxml2::XMLElement *el, std::vector<mesh*>* meshes) {
+
+    using namespace tinyxml2;
+    bool b_success = true;
+
+    const XMLElement* mesh_el = el->FirstChildElement("mesh");
+    if (mesh_el)
+    {
+        do {
+            const char* name_attr;
+            XMLError err = mesh_el->QueryStringAttribute("name", &name_attr);
+            if(err != XML_SUCCESS) {
+                printf("Error reading mesh name attr\n");
+                return false;
+            }
+            std::string obj_filename;
+            // assume file name is relative to scene xml file
+            size_t path_end = scene_filename.find_last_of('/');
+            if(path_end) {
+                obj_filename = scene_filename.substr(0, path_end+1);
+                obj_filename.append(name_attr);
+            } else {
+                obj_filename = name_attr;
+            }
+
+            ObjFile* obj_model = load_obj_from_file(obj_filename.c_str());
+            if(!obj_model) {
+                printf("Failed to load obj model from: %s\n", obj_filename.c_str());
+                return false;
+            }
+
+            const XMLElement* material_solid_el = mesh_el->FirstChildElement("material_solid");
+            material mat;
+            b_success &= read_material_solid(material_solid_el, &mat);
+
+            if(!b_success) {
+                printf("Failed reading surfaces: %s:%d\n", __FILE__, __LINE__);
+            }
+
+            meshes->push_back(new mesh(obj_model, mat));
+
+        } while((mesh_el = mesh_el->NextSiblingElement("mesh")));
+    }
+
+    return b_success;
 }
 
 bool scene::read_material_solid(const class tinyxml2::XMLElement *el, material* mat) {

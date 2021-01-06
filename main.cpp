@@ -46,11 +46,9 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
 }
 #endif
 
-bool ray_shadow(const ray& r, const scene& world) {
-
+bool ray_shadow(const ray& r, const scene& world, Real t_max) {
     hit_info rec;
     Real t_min = 1e-3f;
-    Real t_max = 1e+5f;
     return world.intersect(r, t_min, t_max, rec);
 }
 
@@ -72,10 +70,32 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
             switch(l.get_type()) {
                 case light::Directional:
                     {
-                        const vec3& light_dir = l.get_direction();
+                        const vec3& light_dir = normalize(l.get_direction());
 
                         ray sh_r(rec.p, -light_dir);
-                        bool b_in_shadow = ray_shadow(sh_r, world);
+                        bool b_in_shadow = ray_shadow(sh_r, world, Real(1e+5));
+                        if(b_in_shadow)
+                            break;
+
+                        const color& light_color = l.get_color();
+                        Real ndotl = max(dot(rec.normal, -light_dir), r0);
+                        diffuse = diffuse + ndotl * light_color;
+
+                        vec3 view_dir = normalize(r.origin() - rec.p);
+                        vec3 reflected_dir = reflect(light_dir, rec.normal); 
+
+                        Real spec = pow(max(dot(view_dir, reflected_dir), r0), rec.mat.exponent);
+                        specular = specular + rec.mat.ks * spec * light_color;
+                        break;
+                    }
+                case light::Point:
+                    {
+                        vec3 light_dir = (rec.p - l.get_position());
+                        Real dist2light = length(light_dir);
+                        light_dir = light_dir / dist2light;
+
+                        ray sh_r(rec.p, -light_dir);
+                        bool b_in_shadow = ray_shadow(sh_r, world, dist2light);
                         if(b_in_shadow)
                             break;
 
@@ -88,9 +108,7 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
 
                         Real spec = pow(max(dot(view_dir, reflected_dir), r0), rec.mat.exponent);
                         specular = specular + rec.mat.ks * spec * light_color;  
-                    }
-                case light::Point:
-                    {
+                        break;
                     }
             }
         }
@@ -183,6 +201,7 @@ int main(int argc, char** argv) {
     Real oo_h = Real(1.0) / Real(image_height - 1);
     for (int j = image_height - 1; j >= 0; --j) {
         for (int i = 0; i < image_width; ++i) {
+
             Real u = Real(i) * oo_w;
             Real v = Real(j) * oo_h;
             

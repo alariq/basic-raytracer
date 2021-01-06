@@ -3,6 +3,7 @@
 #include "config.h"
 #include "vec.h"
 #include "sphere.h"
+#include "mesh.h"
 #include "light.h"
 #include "material.h"
 
@@ -24,9 +25,11 @@ class scene {
     private:
     std::vector<sphere> spheres;
     std::vector<light> lights;
+    std::vector<mesh*> meshes;
     color ambient_colour;
     color background_colour;
     camera_params cam_params;
+    std::string scene_filename;
     std::string output_filename;
 
     public:
@@ -34,6 +37,7 @@ class scene {
     bool load(const char* filename);
 
     scene():background_colour(-1,-1,-1) {}
+    ~scene();
 
     const std::vector<light> &get_lights() const { return lights; }
 
@@ -47,11 +51,23 @@ class scene {
             }
         }
 
+        for(const auto& m: meshes) {
+            if(m->hit(r, t_min, t_max, hit)) {
+                t_max = hit.t;
+                hit.mat = m->get_material();
+                b_hit = true;
+            }
+        }
+
         return b_hit;
     }
 
     void add_sphere(const point3& pos, Real radius, const material& mat) {
         spheres.emplace_back(pos, radius, mat);
+    }
+
+    void add_mesh(const struct ObjFile* obj, const material& mat) {
+        meshes.emplace_back(new mesh(obj, mat));
     }
 
     void add_light(const light& l) {
@@ -72,7 +88,8 @@ class scene {
       bool read_camera(const class tinyxml2::XMLElement *el,
                        scene::camera_params *cp);
       bool read_lights(const class tinyxml2::XMLElement *el, color* ambient, std::vector<light>* lights);
-      bool read_surfaces(const class tinyxml2::XMLElement *el, std::vector<sphere>* spheres);
+      bool read_spheres(const class tinyxml2::XMLElement *el, std::vector<sphere>* spheres);
+      bool read_meshes(const class tinyxml2::XMLElement *el, std::vector<mesh*>* meshes);
       bool read_material_solid(const class tinyxml2::XMLElement *el, material* mat);
 
       color read_colour(const class tinyxml2::XMLElement *el, bool *b_success);
