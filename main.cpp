@@ -79,8 +79,8 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
 
                         const color& light_color = l.get_color();
                         Real ndotl = max(dot(rec.normal, -light_dir), r0);
-                        diffuse = diffuse + ndotl * light_color;
-
+                        diffuse = diffuse + ndotl * rec.mat.kd * light_color;
+                        
                         vec3 view_dir = normalize(r.origin() - rec.p);
                         vec3 reflected_dir = reflect(light_dir, rec.normal); 
 
@@ -93,6 +93,7 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
                         vec3 light_dir = (rec.p - l.get_position());
                         Real dist2light = length(light_dir);
                         light_dir = light_dir / dist2light;
+                        Real dist_sqr = 1;//dist2light*dist2light;
 
                         ray sh_r(rec.p, -light_dir);
                         bool b_in_shadow = ray_shadow(sh_r, world, dist2light);
@@ -101,19 +102,32 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
 
                         const color& light_color = l.get_color();
                         Real ndotl = max(dot(rec.normal, -light_dir), r0);
-                        diffuse = diffuse + ndotl * light_color;
+                        diffuse = diffuse + ndotl * light_color * rec.mat.kd / dist_sqr;
 
                         vec3 view_dir = normalize(r.origin() - rec.p);
                         vec3 reflected_dir = reflect(light_dir, rec.normal); 
 
+                        // Blinn-Phong
+                        //vec3 h = Real(0.5)*(-light_dir + rec.normal);
+                        //Real spec = pow(max(dot(h, rec.normal), r0), rec.mat.exponent);
+                        // Phong
                         Real spec = pow(max(dot(view_dir, reflected_dir), r0), rec.mat.exponent);
-                        specular = specular + rec.mat.ks * spec * light_color;  
+                        specular = specular + rec.mat.ks * spec * light_color / dist_sqr;  
                         break;
                     }
             }
         }
+        
+        color refl = color(1,1,1);
+        if(rec.mat.reflectance > r0) {
+            vec3 reflected = reflect(normalize(r.direction()), rec.normal);
+            if(dot(reflected, rec.normal) > 0) {
+                ray r_refl(rec.p, reflected);
+                refl = ray_color(r_refl, world, depth_level-1);
+            }
+        }
 
-        return (ambient + diffuse + specular) * rec.mat.albedo;
+        return (ambient + diffuse) * (rec.mat.albedo * (1-rec.mat.reflectance) + refl * rec.mat.reflectance) + specular;
     }
 
     if (world.has_background()) {
@@ -125,10 +139,18 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
     }
 }
 
+//#define USE_GAMMA_CORRECTION
 void write_color(FILE* fh, color pixel) {
 
     constexpr Real scale = Real(1.0) / g_samples_per_pixel;
+#ifdef USE_GAMMA_CORRECTION
+    pixel.x = std::sqrt(scale * pixel.x);
+    pixel.y = std::sqrt(scale * pixel.y);
+    pixel.z = std::sqrt(scale * pixel.z);
+#else
     pixel = scale * pixel;
+#endif
+
     int ir = (int)(255 * clamp(pixel.x, Real(0), Real(1)));
     int ig = (int)(255 * clamp(pixel.y, Real(0), Real(1)));
     int ib = (int)(255 * clamp(pixel.z, Real(0), Real(1)));
