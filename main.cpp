@@ -52,6 +52,29 @@ bool ray_shadow(const ray& r, const scene& world, Real t_max) {
     return world.intersect(r, t_min, t_max, rec);
 }
 
+Real fresnel(Real n1, Real n2, vec3 normal, vec3 incident, Real refl_k)
+{
+        // Schlick aproximation
+        Real r0 = (n1-n2) / (n1+n2);
+        r0 *= r0;
+        Real cosX = -dot(normal, incident);
+        if (n1 > n2)
+        {
+            Real n = n1/n2;
+            Real sinT2 = n*n*(1.0-cosX*cosX);
+            // Total internal reflection
+            if (sinT2 > 1.0)
+                return 1.0;
+            cosX = sqrt(1.0-sinT2);
+        }
+        Real x = 1.0-cosX;
+        Real ret = r0+(1.0-r0)*x*x*x*x*x;
+ 
+        // adjust reflect multiplier for object reflectivity
+        ret = (refl_k + (1.0 - refl_k) * ret);
+        return ret;
+}
+
 color ray_color(const ray& r, const scene& world, int depth_level) {
 
     hit_info rec;
@@ -119,15 +142,21 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
         }
         
         color refl = color(1,1,1);
+        Real k_refl = 0;
         if(rec.mat.reflectance > r0) {
             vec3 reflected = reflect(normalize(r.direction()), rec.normal);
             if(dot(reflected, rec.normal) > 0) {
                 ray r_refl(rec.p, reflected);
                 refl = ray_color(r_refl, world, depth_level-1);
+                k_refl = rec.mat.reflectance;
+#ifdef USE_FRESNEL
+                vec3 incident = -normalize(r.origin() - rec.p);
+                k_refl = fresnel(1.0, rec.mat.refraction_iof, rec.normal, incident, k_refl); 
+#endif
             }
         }
 
-        return (ambient + diffuse) * (rec.mat.albedo * (1-rec.mat.reflectance) + refl * rec.mat.reflectance) + specular;
+        return ((ambient + diffuse) * rec.mat.albedo + specular) * (1-k_refl) + refl * k_refl;
     }
 
     if (world.has_background()) {
@@ -139,7 +168,6 @@ color ray_color(const ray& r, const scene& world, int depth_level) {
     }
 }
 
-//#define USE_GAMMA_CORRECTION
 void write_color(FILE* fh, color pixel) {
 
     constexpr Real scale = Real(1.0) / g_samples_per_pixel;
